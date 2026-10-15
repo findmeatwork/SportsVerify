@@ -5,7 +5,7 @@ import ImageUpload from "../components/ImageUpload.jsx";
 import Spinner from "../components/Spinner.jsx";
 import TxStatus from "../components/TxStatus.jsx";
 import { useWallet } from "../hooks/useWallet.js";
-import { getEvents, registerParticipant } from "../services/blockchain/contractService.js";
+import { getOpenEvents, registerParticipant } from "../services/blockchain/contractService.js";
 import { mapBlockchainError } from "../services/blockchain/errorMapper.js";
 import { computeCommitment, generateParticipantId, generateSalt, isValidBytes32 } from "../utils/participant.js";
 import { validateDateOfBirth, validateRequired } from "../utils/validators.js";
@@ -48,6 +48,7 @@ export default function RegisterPage() {
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsError, setEventsError] = useState("");
+  const [eventsRetry, setEventsRetry] = useState(0);
   const [values, setValues] = useState(initialValues);
   const [participantImage, setParticipantImage] = useState(null);
   const [organizationImage, setOrganizationImage] = useState(null);
@@ -59,22 +60,28 @@ export default function RegisterPage() {
 
   useEffect(() => {
     let active = true;
-    getEvents()
+    Promise.resolve()
+      .then(() => {
+        if (!active) return null;
+        setEventsLoading(true);
+        setEventsError("");
+        setEvents([]);
+        return getOpenEvents();
+      })
       .then((chainEvents) => {
-        const openEvents = chainEvents.filter((event) => (
-          event.registrationOpen === true
-          && Number(event.registrationDeadline) * 1000 > Date.now()
-        ));
-        if (active) setEvents(openEvents);
+        if (active && chainEvents) setEvents(chainEvents);
       })
       .catch((error) => {
-        if (active) setEventsError(mapBlockchainError(error));
+        if (active) {
+          setEvents([]);
+          setEventsError(mapBlockchainError(error));
+        }
       })
       .finally(() => {
         if (active) setEventsLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [wallet.account, wallet.chainId, eventsRetry]);
 
   const errors = validateForm(values);
   const canSubmit = isFormValid(errors)
@@ -185,7 +192,14 @@ export default function RegisterPage() {
               <div><h2 id="event-section-heading">Event and reference</h2><p>Choose an open event and create a synthetic reference.</p></div>
             </div>
             {eventsLoading ? <div className="form-state"><Spinner label="Loading open events…" /></div> : null}
-            {eventsError && <Banner type="error">{eventsError}</Banner>}
+            {!eventsLoading && eventsError && (
+              <Banner type="error" className="wallet-prompt">
+                {eventsError}
+                <button className="text-button" type="button" onClick={() => setEventsRetry((current) => current + 1)}>
+                  Retry event loading
+                </button>
+              </Banner>
+            )}
             {!eventsLoading && !eventsError && events.length === 0 && (
               <div className="empty-state">No events are currently open for registration.</div>
             )}

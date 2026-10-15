@@ -51,6 +51,11 @@ function getContractAddress() {
 
 function getReadProvider() {
   if (readProvider) return readProvider;
+  const localRpcOverride = globalThis.process?.env?.LOCAL_RPC_URL;
+  if (localRpcOverride) {
+    readProvider = new JsonRpcProvider(localRpcOverride, chainId);
+    return readProvider;
+  }
   if (rpcUrl) {
     readProvider = new JsonRpcProvider(rpcUrl, chainId);
     return readProvider;
@@ -125,9 +130,26 @@ export async function getEvents(organizerAddress) {
   }
 }
 
+export async function getOpenEvents() {
+  try {
+    const events = await getReadContract().getActiveEvents();
+    return events.map(normalizeEvent);
+  } catch (error) {
+    throw new Error(mapBlockchainError(error), { cause: error });
+  }
+}
+
 export async function getEventById(eventId) {
   try {
     return normalizeEvent(await getReadContract().getEventById(eventId));
+  } catch (error) {
+    throw new Error(mapBlockchainError(error));
+  }
+}
+
+export async function getEventRegistrationCount(eventId) {
+  try {
+    return asPlainInteger(await getReadContract().getEventRegistrationCount(eventId));
   } catch (error) {
     throw new Error(mapBlockchainError(error));
   }
