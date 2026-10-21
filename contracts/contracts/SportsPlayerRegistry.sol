@@ -230,3 +230,5 @@ contract SportsPlayerRegistry is AccessControl {
             && (eventData.registrationDeadline == 0 || block.timestamp <= eventData.registrationDeadline);
     }
 }
+
+}
