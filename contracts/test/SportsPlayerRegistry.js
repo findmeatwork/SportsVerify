@@ -17,22 +17,29 @@ describe("SportsPlayerRegistry", function () {
   describe("events", function () {
     it("lets an organizer create an event and assigns unique ids", async function () {
       const { registry, organizer } = await loadFixture(deployRegistryFixture);
-      const deadline = BigInt((await time.latest()) + 3600);
+      const currentTime = await time.latest();
+      const eventDeadline = BigInt(currentTime + 7200);
+      const registrationDeadline = BigInt(currentTime + 3600);
 
-      await expect(registry.connect(organizer).createEvent("Regional Cup", deadline))
+      await expect(
+        registry.connect(organizer).createEvent("Regional Cup", eventDeadline, registrationDeadline)
+      )
         .to.emit(registry, "EventCreated")
-        .withArgs(1n, "Regional Cup", organizer.address, anyValue, deadline, true);
-      await registry.connect(organizer).createEvent("Open Trials", 0);
+        .withArgs(1n, "Regional Cup", organizer.address, anyValue, registrationDeadline, true, eventDeadline);
+
+      await registry.connect(organizer).createEvent("Open Trials", eventDeadline, 0);
 
       expect(await registry.getEventCount()).to.equal(2n);
       expect((await registry.getEventById(1)).id).to.equal(1n);
+      expect((await registry.getEventById(1)).eventDeadline).to.equal(eventDeadline);
       expect((await registry.getEventById(2)).id).to.equal(2n);
     });
 
     it("rejects non-organizers and reports invalid event ids", async function () {
       const { registry, other } = await loadFixture(deployRegistryFixture);
+      const eventDeadline = BigInt((await time.latest()) + 3600);
 
-      await expect(registry.connect(other).createEvent("Unauthorized", 0))
+      await expect(registry.connect(other).createEvent("Unauthorized", eventDeadline, 0))
         .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
         .withArgs(other.address, await registry.ORGANIZER_ROLE());
       await expect(registry.getEventById(99))
@@ -40,24 +47,83 @@ describe("SportsPlayerRegistry", function () {
         .withArgs(99n);
     });
 
+    it("rejects invalid event deadline and invalid registration deadline", async function () {
+      const { registry, organizer } = await loadFixture(deployRegistryFixture);
+      const currentTime = await time.latest();
+
+      await expect(
+        registry.connect(organizer).createEvent("Past Event", BigInt(currentTime - 1), 0)
+      ).to.be.revertedWithCustomError(registry, "InvalidEventDeadline");
+
+      await expect(
+        registry.connect(organizer).createEvent("Now Event", BigInt(currentTime), 0)
+      ).to.be.revertedWithCustomError(registry, "InvalidEventDeadline");
+
+      const eventDeadline = BigInt(currentTime + 3600);
+      await expect(
+        registry.connect(organizer).createEvent("Bad Reg", eventDeadline, BigInt(currentTime - 10))
+      ).to.be.revertedWithCustomError(registry, "InvalidRegistrationDeadline");
+
+      await expect(
+        registry.connect(organizer).createEvent("Bad Reg After", eventDeadline, BigInt(currentTime + 7200))
+      ).to.be.revertedWithCustomError(registry, "InvalidRegistrationDeadline");
+    });
+
     it("grants and revokes the organizer role through the admin", async function () {
       const { registry, admin, other } = await loadFixture(deployRegistryFixture);
       const organizerRole = await registry.ORGANIZER_ROLE();
+      const eventDeadline = BigInt((await time.latest()) + 3600);
 
       await registry.connect(admin).grantRole(organizerRole, other.address);
-      await expect(registry.connect(other).createEvent("Granted", 0)).to.emit(registry, "EventCreated");
+      await expect(
+        registry.connect(other).createEvent("Granted", eventDeadline, 0)
+      ).to.emit(registry, "EventCreated");
       await registry.connect(admin).revokeRole(organizerRole, other.address);
-      await expect(registry.connect(other).createEvent("Revoked", 0))
-        .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount");
+      await expect(
+        registry.connect(other).createEvent("Revoked", eventDeadline, 0)
+      ).to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount");
     });
 
-    it("returns only currently active events", async function () {
+    it("computes live event status and hasEventEnded correctly", async function () {
       const { registry, organizer } = await loadFixture(deployRegistryFixture);
-      await registry.connect(organizer).createEvent("Open", 0);
-      await registry.connect(organizer).createEvent("Closed", 0);
-      await registry.connect(organizer).setRegistrationOpen(2, false);
+      const currentTime = await time.latest();
+      const eventDeadline = BigInt(currentTime + 1000);
 
-      const activeEvents = await registry.getActiveEvents();
+      await registry.connect(organizer).createEvent("Track Meet", eventDeadline, 0);
+
+      expect(await registry.getEventStatus(1)).to.equal(0n);
+      expect(await registry.hasEventEnded(1)).to.equal(false);
+
+      await expect(registry.getEventStatus(99))
+        .to.be.revertedWithCustomError(registry, "EventNotFound")
+        .withArgs(99n);
+      await expect(registry.hasEventEnded(99))
+        .to.be.revertedWithCustomError(registry, "EventNotFound")
+        .withArgs(99n);
+
+      await time.increaseTo(eventDeadline);
+
+      expect(await registry.getEventStatus(1)).to.equal(2n);
+      expect(await registry.hasEventEnded(1)).to.equal(true);
+    });
+
+    it("returns only currently active events and excludes finished events", async function () {
+      const { registry, organizer } = await loadFixture(deployRegistryFixture);
+      const currentTime = await time.latest();
+      const shortDeadline = BigInt(currentTime + 100);
+      const longDeadline = BigInt(currentTime + 5000);
+
+      await registry.connect(organizer).createEvent("Open", longDeadline, 0);
+      await registry.connect(organizer).createEvent("Closed", longDeadline, 0);
+      await registry.connect(organizer).setRegistrationOpen(2, false);
+      await registry.connect(organizer).createEvent("WillFinish", shortDeadline, 0);
+
+      let activeEvents = await registry.getActiveEvents();
+      expect(activeEvents.map((eventData) => eventData.id)).to.deep.equal([1n, 3n]);
+
+      await time.increaseTo(shortDeadline);
+
+      activeEvents = await registry.getActiveEvents();
       expect(activeEvents.map((eventData) => eventData.id)).to.deep.equal([1n]);
     });
   });
@@ -65,8 +131,9 @@ describe("SportsPlayerRegistry", function () {
   describe("participant registration", function () {
     async function eventFixture() {
       const fixture = await deployRegistryFixture();
-      await fixture.registry.connect(fixture.organizer).createEvent("Regional Cup", 0);
-      return fixture;
+      const eventDeadline = BigInt((await time.latest()) + 7200);
+      await fixture.registry.connect(fixture.organizer).createEvent("Regional Cup", eventDeadline, 0);
+      return { ...fixture, eventDeadline };
     }
 
     it("registers a participant and emits registration details", async function () {
@@ -106,7 +173,7 @@ describe("SportsPlayerRegistry", function () {
       expect(await registry.getEventRegistrationCount(1)).to.equal(1n);
     });
 
-    it("rejects missing, closed, and expired events", async function () {
+    it("rejects missing, closed, expired, and finished events", async function () {
       const { registry, organizer, participant } = await loadFixture(deployRegistryFixture);
       const participantId = ethers.id("player-001");
       const commitment = ethers.id("commitment");
@@ -115,23 +182,35 @@ describe("SportsPlayerRegistry", function () {
         .to.be.revertedWithCustomError(registry, "EventNotFound")
         .withArgs(1n);
 
-      await registry.connect(organizer).createEvent("Closed", 0);
+      const currentTime = await time.latest();
+      const longDeadline = BigInt(currentTime + 10000);
+      const regDeadline = BigInt(currentTime + 200);
+
+      await registry.connect(organizer).createEvent("Closed", longDeadline, 0);
       await registry.connect(organizer).setRegistrationOpen(1, false);
       await expect(registry.connect(participant).registerParticipant(1, participantId, commitment))
         .to.be.revertedWithCustomError(registry, "RegistrationIsClosed")
         .withArgs(1n);
 
-      const pastDeadline = BigInt((await time.latest()) - 1);
-      await registry.connect(organizer).createEvent("Expired", pastDeadline);
+      await registry.connect(organizer).createEvent("RegExpiring", longDeadline, regDeadline);
+      await time.increaseTo(regDeadline + 1n);
       await expect(registry.connect(participant).registerParticipant(2, participantId, commitment))
         .to.be.revertedWithCustomError(registry, "RegistrationDeadlinePassed")
         .withArgs(2n);
+
+      const shortEventDeadline = BigInt((await time.latest()) + 100);
+      await registry.connect(organizer).createEvent("Finishing", shortEventDeadline, 0);
+      await time.increaseTo(shortEventDeadline);
+      await expect(registry.connect(participant).registerParticipant(3, participantId, commitment))
+        .to.be.revertedWithCustomError(registry, "EventNotActive")
+        .withArgs(3n);
     });
 
     it("allows the same participant to register for separate events", async function () {
       const { registry, organizer, participant } = await loadFixture(eventFixture);
       const participantId = ethers.id("player-001");
-      await registry.connect(organizer).createEvent("Open Trials", 0);
+      const eventDeadline = BigInt((await time.latest()) + 3600);
+      await registry.connect(organizer).createEvent("Open Trials", eventDeadline, 0);
 
       await registry.connect(participant).registerParticipant(1, participantId, ethers.id("event-one"));
       await registry.connect(participant).registerParticipant(2, participantId, ethers.id("event-two"));

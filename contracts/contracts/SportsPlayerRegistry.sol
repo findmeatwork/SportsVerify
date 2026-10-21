@@ -6,6 +6,12 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract SportsPlayerRegistry is AccessControl {
     bytes32 public constant ORGANIZER_ROLE = keccak256("ORGANIZER_ROLE");
 
+    enum EventStatus {
+        Active,
+        Cancelled,
+        Finished
+    }
+
     enum RegistrationStatus {
         None,
         Registered,
@@ -20,6 +26,8 @@ contract SportsPlayerRegistry is AccessControl {
         uint256 createdAt;
         uint256 registrationDeadline;
         bool registrationOpen;
+        uint256 eventDeadline;
+        bool cancelled;
     }
 
     struct Registration {
@@ -37,6 +45,9 @@ contract SportsPlayerRegistry is AccessControl {
     error ZeroCommitment();
     error ParticipantAlreadyRegistered(uint256 eventId, bytes32 participantId);
     error NotEventManager(address caller, uint256 eventId);
+    error InvalidEventDeadline();
+    error InvalidRegistrationDeadline();
+    error EventNotActive(uint256 eventId);
 
     event EventCreated(
         uint256 indexed id,
@@ -44,7 +55,8 @@ contract SportsPlayerRegistry is AccessControl {
         address indexed organizer,
         uint256 createdAt,
         uint256 registrationDeadline,
-        bool registrationOpen
+        bool registrationOpen,
+        uint256 eventDeadline
     );
     event ParticipantRegistered(
         uint256 indexed eventId,
@@ -64,11 +76,18 @@ contract SportsPlayerRegistry is AccessControl {
         _grantRole(ORGANIZER_ROLE, msg.sender);
     }
 
-    function createEvent(string calldata name, uint256 registrationDeadline)
+    function createEvent(string calldata name, uint256 eventDeadline, uint256 registrationDeadline)
         external
         onlyRole(ORGANIZER_ROLE)
         returns (uint256 id)
     {
+        if (eventDeadline <= block.timestamp) {
+            revert InvalidEventDeadline();
+        }
+        if (registrationDeadline != 0 && (registrationDeadline <= block.timestamp || registrationDeadline > eventDeadline)) {
+            revert InvalidRegistrationDeadline();
+        }
+
         id = _nextEventId++;
         uint256 createdAt = block.timestamp;
         _events[id] = EventData({
@@ -77,10 +96,26 @@ contract SportsPlayerRegistry is AccessControl {
             organizer: msg.sender,
             createdAt: createdAt,
             registrationDeadline: registrationDeadline,
-            registrationOpen: true
+            registrationOpen: true,
+            eventDeadline: eventDeadline,
+            cancelled: false
         });
 
-        emit EventCreated(id, name, msg.sender, createdAt, registrationDeadline, true);
+        emit EventCreated(id, name, msg.sender, createdAt, registrationDeadline, true, eventDeadline);
+    }
+
+    function getEventStatus(uint256 eventId) public view returns (EventStatus) {
+        EventData storage eventData = _events[eventId];
+        if (eventData.id == 0) revert EventNotFound(eventId);
+        if (eventData.cancelled) return EventStatus.Cancelled;
+        if (block.timestamp >= eventData.eventDeadline) return EventStatus.Finished;
+        return EventStatus.Active;
+    }
+
+    function hasEventEnded(uint256 eventId) external view returns (bool) {
+        EventData storage eventData = _events[eventId];
+        if (eventData.id == 0) revert EventNotFound(eventId);
+        return block.timestamp >= eventData.eventDeadline;
     }
 
     function getEventById(uint256 eventId) external view returns (EventData memory) {
@@ -121,6 +156,7 @@ contract SportsPlayerRegistry is AccessControl {
     function registerParticipant(uint256 eventId, bytes32 participantId, bytes32 commitment) external {
         EventData storage eventData = _events[eventId];
         if (eventData.id == 0) revert EventNotFound(eventId);
+        if (getEventStatus(eventId) != EventStatus.Active) revert EventNotActive(eventId);
         if (!eventData.registrationOpen) revert RegistrationIsClosed(eventId);
         if (eventData.registrationDeadline != 0 && block.timestamp > eventData.registrationDeadline) {
             revert RegistrationDeadlinePassed(eventId);
@@ -188,7 +224,9 @@ contract SportsPlayerRegistry is AccessControl {
     }
 
     function _isEventActive(EventData storage eventData) private view returns (bool) {
-        return eventData.registrationOpen
+        return !eventData.cancelled
+            && block.timestamp < eventData.eventDeadline
+            && eventData.registrationOpen
             && (eventData.registrationDeadline == 0 || block.timestamp <= eventData.registrationDeadline);
     }
 }
