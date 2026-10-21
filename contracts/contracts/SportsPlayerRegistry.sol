@@ -48,6 +48,9 @@ contract SportsPlayerRegistry is AccessControl {
     error InvalidEventDeadline();
     error InvalidRegistrationDeadline();
     error EventNotActive(uint256 eventId);
+    error NotEventOrganizer(address caller, uint256 eventId);
+    error EventAlreadyCancelled(uint256 eventId);
+    error EventHasEnded(uint256 eventId);
 
     event EventCreated(
         uint256 indexed id,
@@ -57,6 +60,11 @@ contract SportsPlayerRegistry is AccessControl {
         uint256 registrationDeadline,
         bool registrationOpen,
         uint256 eventDeadline
+    );
+    event EventCancelled(
+        uint256 indexed eventId,
+        address indexed organizer,
+        uint256 cancelledAt
     );
     event ParticipantRegistered(
         uint256 indexed eventId,
@@ -102,6 +110,18 @@ contract SportsPlayerRegistry is AccessControl {
         });
 
         emit EventCreated(id, name, msg.sender, createdAt, registrationDeadline, true, eventDeadline);
+    }
+
+    function cancelEvent(uint256 eventId) external {
+        EventData storage eventData = _events[eventId];
+        if (eventData.id == 0) revert EventNotFound(eventId);
+        if (msg.sender != eventData.organizer) revert NotEventOrganizer(msg.sender, eventId);
+        if (eventData.cancelled) revert EventAlreadyCancelled(eventId);
+        if (block.timestamp >= eventData.eventDeadline) revert EventHasEnded(eventId);
+
+        eventData.cancelled = true;
+
+        emit EventCancelled(eventId, msg.sender, block.timestamp);
     }
 
     function getEventStatus(uint256 eventId) public view returns (EventStatus) {
@@ -229,6 +249,4 @@ contract SportsPlayerRegistry is AccessControl {
             && eventData.registrationOpen
             && (eventData.registrationDeadline == 0 || block.timestamp <= eventData.registrationDeadline);
     }
-}
-
 }

@@ -126,6 +126,42 @@ describe("SportsPlayerRegistry", function () {
       activeEvents = await registry.getActiveEvents();
       expect(activeEvents.map((eventData) => eventData.id)).to.deep.equal([1n]);
     });
+
+    it("allows only the recorded event organizer to cancel before the deadline", async function () {
+      const { registry, admin, organizer, other } = await loadFixture(deployRegistryFixture);
+      const currentTime = await time.latest();
+      const eventDeadline = BigInt(currentTime + 1000);
+
+      await registry.connect(organizer).createEvent("Summer League", eventDeadline, 0);
+
+      await expect(registry.connect(other).cancelEvent(1))
+        .to.be.revertedWithCustomError(registry, "NotEventOrganizer")
+        .withArgs(other.address, 1n);
+
+      await expect(registry.connect(admin).cancelEvent(1))
+        .to.be.revertedWithCustomError(registry, "NotEventOrganizer")
+        .withArgs(admin.address, 1n);
+
+      await expect(registry.connect(organizer).cancelEvent(1))
+        .to.emit(registry, "EventCancelled")
+        .withArgs(1n, organizer.address, anyValue);
+
+      expect(await registry.getEventStatus(1)).to.equal(1n);
+
+      await expect(registry.connect(organizer).cancelEvent(1))
+        .to.be.revertedWithCustomError(registry, "EventAlreadyCancelled")
+        .withArgs(1n);
+
+      await time.increaseTo(eventDeadline + 10n);
+      expect(await registry.getEventStatus(1)).to.equal(1n);
+
+      const newDeadline = BigInt((await time.latest()) + 500);
+      await registry.connect(organizer).createEvent("Late League", newDeadline, 0);
+      await time.increaseTo(newDeadline);
+      await expect(registry.connect(organizer).cancelEvent(2))
+        .to.be.revertedWithCustomError(registry, "EventHasEnded")
+        .withArgs(2n);
+    });
   });
 
   describe("participant registration", function () {
@@ -204,6 +240,12 @@ describe("SportsPlayerRegistry", function () {
       await expect(registry.connect(participant).registerParticipant(3, participantId, commitment))
         .to.be.revertedWithCustomError(registry, "EventNotActive")
         .withArgs(3n);
+
+      await registry.connect(organizer).createEvent("CancelledEvent", longDeadline, 0);
+      await registry.connect(organizer).cancelEvent(4);
+      await expect(registry.connect(participant).registerParticipant(4, participantId, commitment))
+        .to.be.revertedWithCustomError(registry, "EventNotActive")
+        .withArgs(4n);
     });
 
     it("allows the same participant to register for separate events", async function () {
