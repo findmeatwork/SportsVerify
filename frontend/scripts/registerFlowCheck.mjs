@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { JsonRpcProvider, Wallet } from "ethers";
-import { computeCommitment, generateParticipantId, generateSalt } from "../src/utils/participant.js";
+import { computeCommitment, computeDobHash, generateParticipantId, generateSalt } from "../src/utils/participant.js";
 import { createEvent, getParticipant, registerParticipant, verifyCommitment } from "../src/services/blockchain/contractService.js";
 
 const rpcUrl = process.env.LOCAL_RPC_URL || "http://127.0.0.1:8545";
@@ -18,8 +18,10 @@ const participant = new Wallet(participantPrivateKey, provider);
 
 try {
   const eventName = `Flow check ${Date.now()}`;
-  const deadline = Math.floor(Date.now() / 1000) + 3600;
-  const created = await createEvent(eventName, deadline, organizer);
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const deadline = nowUnix + 3600;
+  const eventDeadline = nowUnix + 7200;
+  const created = await createEvent(eventName, eventDeadline, deadline, organizer);
   const eventsContract = await import("../src/services/blockchain/contractService.js");
   const eventList = await eventsContract.getEvents();
   const event = eventList.find((candidate) => candidate.name === eventName);
@@ -27,13 +29,17 @@ try {
 
   const participantId = generateParticipantId();
   const salt = generateSalt();
+  const salt2 = generateSalt();
   const commitment = computeCommitment(event.id, participantId, salt);
-  const registration = await registerParticipant(event.id, participantId, commitment, participant);
+  const dobHash = computeDobHash(event.id, participantId, "1998-07-20", salt2);
+  const registration = await registerParticipant(event.id, participantId, commitment, dobHash, false, participant);
   const record = await getParticipant(event.id, participantId);
   const verified = await verifyCommitment(event.id, participantId, commitment);
 
   assert.equal(record.participantId.toLowerCase(), participantId.toLowerCase(), "stored participant reference must match");
   assert.equal(record.commitment.toLowerCase(), commitment.toLowerCase(), "stored commitment must match");
+  assert.equal(record.dobHash.toLowerCase(), dobHash.toLowerCase(), "stored dobHash must match");
+  assert.equal(record.hasAffiliation, false, "stored hasAffiliation must match");
   assert.equal(verified, true, "on-chain commitment verification must pass");
 
   console.log("REGISTER FLOW PASS");
@@ -46,6 +52,7 @@ try {
     participantId,
     salt,
     commitment,
+    dobHash,
     createTxHash: created.txHash,
     registerTxHash: registration.txHash,
     blockNumber: registration.blockNumber,

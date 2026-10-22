@@ -1,10 +1,10 @@
 {
-  "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+  "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
   "chainId": 31337,
   "networkName": "localhost",
-  "deployedAt": "2026-10-22T06:43:55.727Z",
-  "txHash": "0x39fdf090a2b98faa34c76056afab240950a9d43160ecd17868cf8ba93a88cd8e",
-  "blockNumber": 4,
-  "deploymentBlockNumber": 4,
+  "deployedAt": "2026-10-22T07:06:56.176Z",
+  "txHash": "0xe09875ab9c8783fc771f30ac360f9693a7b6fadef3478aa6f8d90ebfb571fe6a",
+  "blockNumber": 7,
+  "deploymentBlockNumber": 7,
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 }
