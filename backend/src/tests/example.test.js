@@ -1,8 +1,8 @@
-import assert from 'assert';
+import assert from 'node:assert';
 import { config } from '../config/env.js';
+import { test } from 'node:test';
 
-describe('environment config', () => {
-  it('should have config object', () => {
-    assert.ok(config);
-  });
+test('environment config should have config object', () => {
+  assert.ok(config);
 });
+
