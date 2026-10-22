@@ -12,6 +12,21 @@ import { mapBlockchainError } from "./errorMapper.js";
 
 let readProvider;
 
+const STATUS_NAMES = [
+  "NONE",
+  "UNCONFIRMED",
+  "WITHDRAWN",
+  "SUSPENDED",
+  "CONFIRMED",
+  "REJECTED",
+];
+
+const EVENT_STATUS_NAMES = [
+  "ACTIVE",
+  "CANCELLED",
+  "FINISHED",
+];
+
 function asPlainInteger(value) {
   const integer = typeof value === "bigint" ? value : BigInt(value);
   const maxSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
@@ -29,14 +44,30 @@ function normalizeStruct(struct, fields) {
 
 function normalizeEvent(event) {
   return normalizeStruct(event, [
-    "id", "name", "organizer", "createdAt", "registrationDeadline", "registrationOpen",
+    "id",
+    "name",
+    "organizer",
+    "createdAt",
+    "registrationDeadline",
+    "registrationOpen",
+    "eventDeadline",
+    "cancelled",
   ]);
 }
 
 function normalizeParticipant(participant) {
-  return normalizeStruct(participant, [
-    "participantId", "commitment", "registrant", "submittedAt", "status",
+  const normalized = normalizeStruct(participant, [
+    "participantId",
+    "commitment",
+    "registrant",
+    "submittedAt",
+    "status",
+    "dobHash",
+    "hasAffiliation",
   ]);
+  const statusNumber = Number(normalized.status);
+  normalized.status = STATUS_NAMES[statusNumber] || "NONE";
+  return normalized;
 }
 
 function getContractAddress() {
@@ -106,7 +137,11 @@ async function runWrite(method, args, signerOverride) {
     const transaction = await contract[method](...args);
     const receipt = await transaction.wait();
     if (!receipt || receipt.status !== 1) throw new Error("The transaction was not confirmed successfully.");
-    return { txHash: receipt.hash, blockNumber: receipt.blockNumber };
+    return {
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      receipt,
+    };
   } catch (error) {
     throw new Error(mapBlockchainError(error));
   }
@@ -142,6 +177,45 @@ export async function getOpenEvents() {
 export async function getEventById(eventId) {
   try {
     return normalizeEvent(await getReadContract().getEventById(eventId));
+  } catch (error) {
+    throw new Error(mapBlockchainError(error));
+  }
+}
+
+export async function getEventStatus(eventId) {
+  try {
+    const status = await getReadContract().getEventStatus(eventId);
+    return EVENT_STATUS_NAMES[Number(status)] || "ACTIVE";
+  } catch (error) {
+    throw new Error(mapBlockchainError(error));
+  }
+}
+
+export async function hasEventEnded(eventId) {
+  try {
+    return await getReadContract().hasEventEnded(eventId);
+  } catch (error) {
+    throw new Error(mapBlockchainError(error));
+  }
+}
+
+export async function isVerifier(eventId, address) {
+  try {
+    return await getReadContract().isVerifier(eventId, address);
+  } catch (error) {
+    throw new Error(mapBlockchainError(error));
+  }
+}
+
+export async function getVerifications(eventId, participantId) {
+  try {
+    const records = await getReadContract().getVerifications(eventId, participantId);
+    return records.map((record) => ({
+      verifier: record.verifier ?? record[0],
+      approved: Boolean(record.approved ?? record[1]),
+      evidenceHash: record.evidenceHash ?? record[2],
+      timestamp: asPlainInteger(record.timestamp ?? record[3]),
+    }));
   } catch (error) {
     throw new Error(mapBlockchainError(error));
   }
@@ -189,12 +263,42 @@ export async function isOrganizer(address) {
   }
 }
 
-export async function createEvent(name, registrationDeadline, signerOverride) {
-  return runWrite("createEvent", [name, registrationDeadline], signerOverride);
+export async function createEvent(name, eventDeadlineUnix, registrationDeadlineUnix = 0, signerOverride) {
+  let finalEventDeadline = eventDeadlineUnix;
+  let finalRegDeadline = registrationDeadlineUnix;
+  if (!finalEventDeadline) {
+    const now = Math.floor(Date.now() / 1000);
+    finalEventDeadline = now + 86400 * 30;
+  }
+  return runWrite("createEvent", [name, finalEventDeadline, finalRegDeadline], signerOverride);
 }
 
-export async function registerParticipant(eventId, participantId, commitment, signerOverride) {
-  return runWrite("registerParticipant", [eventId, participantId, commitment], signerOverride);
+export async function cancelEvent(eventId, signerOverride) {
+  return runWrite("cancelEvent", [eventId], signerOverride);
+}
+
+export async function addVerifier(eventId, verifierAddress, signerOverride) {
+  return runWrite("addVerifier", [eventId, verifierAddress], signerOverride);
+}
+
+export async function submitVerification(eventId, participantId, approved, evidenceHash, signerOverride) {
+  return runWrite("submitVerification", [eventId, participantId, approved, evidenceHash], signerOverride);
+}
+
+export async function registerParticipant(
+  eventId,
+  participantId,
+  commitment,
+  dobHash,
+  hasAffiliation = false,
+  signerOverride,
+) {
+  const finalDobHash = dobHash || commitment;
+  return runWrite(
+    "registerParticipant",
+    [eventId, participantId, commitment, finalDobHash, Boolean(hasAffiliation)],
+    signerOverride,
+  );
 }
 
 export async function findRegistrationTx(eventId, participantId) {
