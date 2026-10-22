@@ -50,28 +50,36 @@ async function main() {
 
   const address = await registry.getAddress();
   const artifact = await hre.artifacts.readArtifact("SportsPlayerRegistry");
-  const configDirectory = path.resolve(__dirname, "../../frontend/src/config");
+  const frontendConfigDirectory = path.resolve(__dirname, "../../frontend/src/config");
+  const backendConfigDirectory = path.resolve(__dirname, "../../backend/src/config");
+
+  const deploymentBlockNumber = Number(receipt.blockNumber);
   const deploymentConfig = {
     address,
     chainId: Number(chainId),
     networkName,
     deployedAt: new Date().toISOString(),
     txHash: receipt.hash,
+    blockNumber: deploymentBlockNumber,
+    deploymentBlockNumber: deploymentBlockNumber,
+    deployer: deployer.address,
   };
 
-  fs.mkdirSync(configDirectory, { recursive: true });
-  fs.writeFileSync(
-    path.join(configDirectory, "contract.json"),
-    `${JSON.stringify(deploymentConfig, null, 2)}\n`
-  );
-  fs.writeFileSync(
-    path.join(configDirectory, "SportsPlayerRegistry.abi.json"),
-    `${JSON.stringify(artifact.abi, null, 2)}\n`
-  );
+  const serializedConfig = `${JSON.stringify(deploymentConfig, null, 2)}\n`;
+  const serializedAbi = `${JSON.stringify(artifact.abi, null, 2)}\n`;
+
+  fs.mkdirSync(frontendConfigDirectory, { recursive: true });
+  fs.writeFileSync(path.join(frontendConfigDirectory, "contract.json"), serializedConfig);
+  fs.writeFileSync(path.join(frontendConfigDirectory, "SportsPlayerRegistry.abi.json"), serializedAbi);
+
+  fs.mkdirSync(backendConfigDirectory, { recursive: true });
+  fs.writeFileSync(path.join(backendConfigDirectory, "contract.json"), serializedConfig);
+  fs.writeFileSync(path.join(backendConfigDirectory, "SportsPlayerRegistry.abi.json"), serializedAbi);
 
   console.log(`SportsPlayerRegistry address: ${address}`);
   console.log(`Deployment transaction: ${receipt.hash}`);
-  console.log(`Frontend config written to: ${configDirectory}`);
+  console.log(`Frontend config written to: ${frontendConfigDirectory}`);
+  console.log(`Backend config written to: ${backendConfigDirectory}`);
 }
 
 main().catch((error) => {

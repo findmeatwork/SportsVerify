@@ -33,7 +33,50 @@
         "type": "uint256"
       }
     ],
+    "name": "EventAlreadyCancelled",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "EventHasEnded",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "EventNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
     "name": "EventNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidEventDeadline",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidRegistrationDeadline",
     "type": "error"
   },
   {
@@ -55,6 +98,54 @@
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "NotEventOrganizer",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "NotEventVerifier",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "OrganizerCannotBeVerifier",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "eventId",
         "type": "uint256"
@@ -66,6 +157,22 @@
       }
     ],
     "name": "ParticipantAlreadyRegistered",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ParticipantNotRegistered",
     "type": "error"
   },
   {
@@ -91,14 +198,112 @@
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "enum SportsPlayerRegistry.RegistrationStatus",
+        "name": "status",
+        "type": "uint8"
+      }
+    ],
+    "name": "VerificationFinalized",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      }
+    ],
+    "name": "VerifierAlreadyAdded",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      }
+    ],
+    "name": "VerifierAlreadyVoted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddressVerifier",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "ZeroCommitment",
     "type": "error"
   },
   {
     "inputs": [],
+    "name": "ZeroDobHash",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroEvidenceHash",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ZeroParticipantId",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "organizer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "cancelledAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "EventCancelled",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -138,6 +343,12 @@
         "internalType": "bool",
         "name": "registrationOpen",
         "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "eventDeadline",
+        "type": "uint256"
       }
     ],
     "name": "EventCreated",
@@ -175,6 +386,18 @@
         "internalType": "uint256",
         "name": "submittedAt",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "hasAffiliation",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "dobHash",
+        "type": "bytes32"
       }
     ],
     "name": "ParticipantRegistered",
@@ -256,6 +479,86 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "evidenceHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "resultingStatus",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "VerificationVoted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "addedBy",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "addedAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "VerifierAdded",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [
@@ -284,9 +587,45 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      }
+    ],
+    "name": "addVerifier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "cancelEvent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "string",
         "name": "name",
         "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "eventDeadline",
+        "type": "uint256"
       },
       {
         "internalType": "uint256",
@@ -340,6 +679,16 @@
             "internalType": "bool",
             "name": "registrationOpen",
             "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "eventDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "cancelled",
+            "type": "bool"
           }
         ],
         "internalType": "struct SportsPlayerRegistry.EventData[]",
@@ -390,6 +739,16 @@
           {
             "internalType": "bool",
             "name": "registrationOpen",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "eventDeadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "cancelled",
             "type": "bool"
           }
         ],
@@ -468,6 +827,25 @@
         "internalType": "uint256",
         "name": "eventId",
         "type": "uint256"
+      }
+    ],
+    "name": "getEventStatus",
+    "outputs": [
+      {
+        "internalType": "enum SportsPlayerRegistry.EventStatus",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
       },
       {
         "internalType": "bytes32",
@@ -503,6 +881,16 @@
             "internalType": "enum SportsPlayerRegistry.RegistrationStatus",
             "name": "status",
             "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "dobHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bool",
+            "name": "hasAffiliation",
+            "type": "bool"
           }
         ],
         "internalType": "struct SportsPlayerRegistry.Registration",
@@ -535,6 +923,52 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getVerifications",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "verifier",
+            "type": "address"
+          },
+          {
+            "internalType": "bool",
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "evidenceHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct SportsPlayerRegistry.VerificationRecord[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
@@ -548,6 +982,25 @@
     "name": "grantRole",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      }
+    ],
+    "name": "hasEventEnded",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -606,6 +1059,30 @@
         "type": "uint256"
       },
       {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "isVerifier",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
         "internalType": "bytes32",
         "name": "participantId",
         "type": "bytes32"
@@ -614,6 +1091,16 @@
         "internalType": "bytes32",
         "name": "commitment",
         "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "dobHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "hasAffiliation",
+        "type": "bool"
       }
     ],
     "name": "registerParticipant",
@@ -671,6 +1158,34 @@
       }
     ],
     "name": "setRegistrationOpen",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "eventId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "participantId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "evidenceHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "submitVerification",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
