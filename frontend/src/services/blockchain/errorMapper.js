@@ -2,7 +2,6 @@ import { Interface } from "ethers";
 import registryAbi from "../../config/SportsPlayerRegistry.abi.json" with { type: "json" };
 
 const contractInterface = new Interface(registryAbi);
-
 const contractErrorMessages = {
   AccessControlBadConfirmation: "Wallet confirmation did not match the connected account.",
   AccessControlUnauthorizedAccount: "This wallet is not authorized to perform that action.",
@@ -13,20 +12,6 @@ const contractErrorMessages = {
   RegistrationIsClosed: "Registration for this event is closed.",
   ZeroCommitment: "The registration commitment cannot be empty.",
   ZeroParticipantId: "The participant identifier cannot be empty.",
-  InvalidEventDeadline: "The event deadline must be in the future.",
-  InvalidRegistrationDeadline: "The registration deadline must be in the future and cannot be after the event deadline.",
-  EventNotActive: "This event is no longer active.",
-  EventAlreadyCancelled: "This event has already been cancelled.",
-  EventHasEnded: "This event has already ended.",
-  NotEventOrganizer: "Only the recorded organizer of this event can perform this action.",
-  ZeroDobHash: "The date-of-birth hash cannot be empty.",
-  ZeroAddressVerifier: "The verifier address cannot be the zero address.",
-  OrganizerCannotBeVerifier: "The event organizer cannot be added as a verifier.",
-  VerifierAlreadyAdded: "This wallet is already an authorized verifier for this event.",
-  NotEventVerifier: "You are not an authorized verifier for this event.",
-  ParticipantNotRegistered: "No registration was found for this participant.",
-  ZeroEvidenceHash: "Verification evidence hash cannot be empty.",
-  VerifierAlreadyVoted: "You have already submitted a verification vote for this participant.",
 };
 
 function collectErrorData(error, seen = new Set()) {
@@ -44,12 +29,13 @@ function collectErrorData(error, seen = new Set()) {
   return values;
 }
 
-function parseContractError(error) {
+function decodedContractError(error) {
   for (const data of collectErrorData(error)) {
     try {
       const parsed = contractInterface.parseError(data);
-      if (parsed) return parsed;
+      if (parsed) return parsed.name;
     } catch {
+      // Keep looking through nested provider error data.
     }
   }
   return null;
@@ -79,21 +65,10 @@ export function mapBlockchainError(error) {
     return "The blockchain network could not be reached. Check the RPC connection and try again.";
   }
 
-  const parsedError = parseContractError(error);
-  if (parsedError) {
-    if (parsedError.name === "VerificationFinalized") {
-      const status = Number(parsedError.args?.status ?? parsedError.args?.[2]);
-      if (status === 4) {
-        return "Verification has already been finalized: this participant is confirmed.";
-      }
-      if (status === 5) {
-        return "Verification has already been finalized: this participant is rejected.";
-      }
-      return "Verification has already been finalized for this participant.";
-    }
-
-    return contractErrorMessages[parsedError.name]
-      || `The contract rejected the request (${parsedError.name}).`;
+  const contractErrorName = decodedContractError(error);
+  if (contractErrorName) {
+    return contractErrorMessages[contractErrorName]
+      || `The contract rejected the request (${contractErrorName}).`;
   }
 
   if (error.reason) return String(error.reason);

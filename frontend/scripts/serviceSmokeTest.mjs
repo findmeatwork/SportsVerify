@@ -6,7 +6,7 @@ process.env.VITE_TARGET_CHAIN = "localhost";
 const { default: deployment } = await import("../src/config/contract.json", { with: { type: "json" } });
 const { default: registryAbi } = await import("../src/config/SportsPlayerRegistry.abi.json", { with: { type: "json" } });
 const { rpcUrl } = await import("../src/config/network.js");
-const { computeCommitment, computeDobHash, generateParticipantId, generateSalt } = await import("../src/utils/participant.js");
+const { computeCommitment, generateParticipantId, generateSalt } = await import("../src/utils/participant.js");
 const { mapBlockchainError } = await import("../src/services/blockchain/errorMapper.js");
 
 const provider = new JsonRpcProvider(rpcUrl, 31337);
@@ -54,12 +54,10 @@ try {
 
   currentStep = 1;
   const eventName = `Smoke ${Date.now()}`;
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const registrationDeadline = nowUnix + 3600;
-  const eventDeadline = nowUnix + 7200;
+  const registrationDeadline = Math.floor(Date.now() / 1000) + 3600;
   const beforeCount = Number(await contract.getEventCount());
-  printStep(currentStep, "BEFORE", { organizer: await organizer.getAddress(), eventName, registrationDeadline, eventDeadline, beforeCount });
-  const txCreate = await contract.connect(organizer).createEvent(eventName, eventDeadline, registrationDeadline);
+  printStep(currentStep, "BEFORE", { organizer: await organizer.getAddress(), eventName, registrationDeadline, beforeCount });
+  const txCreate = await contract.connect(organizer).createEvent(eventName, registrationDeadline);
   const receiptCreate = await txCreate.wait();
   const afterCount = Number(await contract.getEventCount());
   const eventId = afterCount;
@@ -68,12 +66,9 @@ try {
   currentStep = 2;
   const participantId = generateParticipantId();
   const salt = generateSalt();
-  const salt2 = generateSalt();
   const commitment = computeCommitment(eventId, participantId, salt);
-  const dobHash = computeDobHash(eventId, participantId, "2000-01-01", salt2);
-  const hasAffiliation = false;
-  printStep(currentStep, "BEFORE", { participant: await participant.getAddress(), eventId, participantId, commitment, salt, dobHash });
-  const txRegister = await contract.connect(participant).registerParticipant(eventId, participantId, commitment, dobHash, hasAffiliation);
+  printStep(currentStep, "BEFORE", { participant: await participant.getAddress(), eventId, participantId, commitment, salt });
+  const txRegister = await contract.connect(participant).registerParticipant(eventId, participantId, commitment);
   const receiptRegister = await txRegister.wait();
   printStep(currentStep, "AFTER", { txHash: receiptRegister.hash, blockNumber: receiptRegister.blockNumber, eventId, participantId, commitment });
 
@@ -107,7 +102,7 @@ try {
   currentStep = 7;
   let duplicateFriendly = "";
   try {
-    await contract.connect(participant).registerParticipant(eventId, participantId, commitment, dobHash, hasAffiliation);
+    await contract.connect(participant).registerParticipant(eventId, participantId, commitment);
     throw new Error("duplicate registerParticipant unexpectedly succeeded");
   } catch (error) {
     duplicateFriendly = mapBlockchainError(error);
@@ -118,7 +113,7 @@ try {
   currentStep = 8;
   let unauthorizedFriendly = "";
   try {
-    await contract.connect(nonOrganizer).createEvent(`Unauthorized ${Date.now()}`, eventDeadline, registrationDeadline);
+    await contract.connect(nonOrganizer).createEvent(`Unauthorized ${Date.now()}`, registrationDeadline);
     throw new Error("non-organizer createEvent unexpectedly succeeded");
   } catch (error) {
     unauthorizedFriendly = mapBlockchainError(error);

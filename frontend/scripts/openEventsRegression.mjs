@@ -81,9 +81,8 @@ try {
     participantIsOrganizer: false,
   });
 
-  const nowUnix = Math.floor(Date.now() / 1000);
   const noDeadlineName = `Regression no deadline ${Date.now()}`;
-  await sendOrganizerTransaction("createEvent", [noDeadlineName, nowUnix + 7200, 0]);
+  await sendOrganizerTransaction("createEvent", [noDeadlineName, 0]);
   const noDeadlineEvent = await getListedEvent(noDeadlineName);
   const listWithoutDeadline = await getOpenEvents();
   assert.ok(listWithoutDeadline.some((event) => String(event.id) === String(noDeadlineEvent.id)));
@@ -97,7 +96,7 @@ try {
 
   const futureDeadline = Math.floor(Date.now() / 1000) + 3600;
   const futureName = `Regression future deadline ${Date.now()}`;
-  await sendOrganizerTransaction("createEvent", [futureName, futureDeadline + 3600, futureDeadline]);
+  await sendOrganizerTransaction("createEvent", [futureName, futureDeadline]);
   const futureEvent = await getListedEvent(futureName);
   const listWithFuture = await getOpenEvents();
   assert.ok(listWithFuture.some((event) => String(event.id) === String(futureEvent.id)));
@@ -111,7 +110,7 @@ try {
   const timestampBeforeShortEvent = await provider.getBlock("latest");
   const shortDeadline = Number(timestampBeforeShortEvent.timestamp) + 3;
   const pastName = `Regression elapsed deadline ${Date.now()}`;
-  await sendOrganizerTransaction("createEvent", [pastName, shortDeadline + 3600, shortDeadline]);
+  await sendOrganizerTransaction("createEvent", [pastName, shortDeadline]);
   const pastEvent = await getListedEvent(pastName);
   await provider.send("evm_increaseTime", [5]);
   await provider.send("evm_mine", []);
@@ -130,7 +129,7 @@ try {
   });
 
   const closedName = `Regression closed event ${Date.now()}`;
-  await sendOrganizerTransaction("createEvent", [closedName, nowUnix + 7200, 0]);
+  await sendOrganizerTransaction("createEvent", [closedName, 0]);
   const closedEvent = await getListedEvent(closedName);
   await sendOrganizerTransaction("setRegistrationOpen", [closedEvent.id, false]);
   const closedEventAfterUpdate = await getEventById(closedEvent.id);
