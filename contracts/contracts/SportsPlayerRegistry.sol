@@ -56,6 +56,9 @@ contract SportsPlayerRegistry is AccessControl {
     error EventAlreadyCancelled(uint256 eventId);
     error EventHasEnded(uint256 eventId);
     error ZeroDobHash();
+    error ZeroAddressVerifier();
+    error OrganizerCannotBeVerifier(uint256 eventId, address account);
+    error VerifierAlreadyAdded(uint256 eventId, address verifier);
 
     event EventCreated(
         uint256 indexed id,
@@ -71,6 +74,12 @@ contract SportsPlayerRegistry is AccessControl {
         address indexed organizer,
         uint256 cancelledAt
     );
+    event VerifierAdded(
+        uint256 indexed eventId,
+        address indexed verifier,
+        address indexed addedBy,
+        uint256 addedAt
+    );
     event ParticipantRegistered(
         uint256 indexed eventId,
         bytes32 indexed participantId,
@@ -85,6 +94,7 @@ contract SportsPlayerRegistry is AccessControl {
     mapping(uint256 eventId => EventData eventData) private _events;
     mapping(uint256 eventId => mapping(bytes32 participantId => Registration)) private _registrations;
     mapping(uint256 eventId => bytes32[]) private _eventParticipantIds;
+    mapping(uint256 eventId => mapping(address verifier => bool)) private _verifiers;
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -129,6 +139,24 @@ contract SportsPlayerRegistry is AccessControl {
         eventData.cancelled = true;
 
         emit EventCancelled(eventId, msg.sender, block.timestamp);
+    }
+
+    function addVerifier(uint256 eventId, address verifier) external {
+        EventData storage eventData = _events[eventId];
+        if (eventData.id == 0) revert EventNotFound(eventId);
+        if (msg.sender != eventData.organizer) revert NotEventOrganizer(msg.sender, eventId);
+        if (getEventStatus(eventId) != EventStatus.Active) revert EventNotActive(eventId);
+        if (verifier == address(0)) revert ZeroAddressVerifier();
+        if (verifier == eventData.organizer) revert OrganizerCannotBeVerifier(eventId, verifier);
+        if (_verifiers[eventId][verifier]) revert VerifierAlreadyAdded(eventId, verifier);
+
+        _verifiers[eventId][verifier] = true;
+
+        emit VerifierAdded(eventId, verifier, msg.sender, block.timestamp);
+    }
+
+    function isVerifier(uint256 eventId, address account) public view returns (bool) {
+        return _verifiers[eventId][account];
     }
 
     function getEventStatus(uint256 eventId) public view returns (EventStatus) {

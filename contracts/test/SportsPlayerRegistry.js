@@ -5,13 +5,13 @@ const { loadFixture, time } = require("@nomicfoundation/hardhat-network-helpers"
 
 describe("SportsPlayerRegistry", function () {
   async function deployRegistryFixture() {
-    const [admin, organizer, participant, other] = await ethers.getSigners();
+    const [admin, organizer, participant, other, verifierOne, verifierTwo] = await ethers.getSigners();
     const Registry = await ethers.getContractFactory("SportsPlayerRegistry");
     const registry = await Registry.deploy();
     await registry.waitForDeployment();
 
     await registry.grantRole(await registry.ORGANIZER_ROLE(), organizer.address);
-    return { registry, admin, organizer, participant, other };
+    return { registry, admin, organizer, participant, other, verifierOne, verifierTwo };
   }
 
   describe("events", function () {
@@ -160,6 +160,85 @@ describe("SportsPlayerRegistry", function () {
       await time.increaseTo(newDeadline);
       await expect(registry.connect(organizer).cancelEvent(2))
         .to.be.revertedWithCustomError(registry, "EventHasEnded")
+        .withArgs(2n);
+    });
+  });
+
+  describe("verifier management", function () {
+    it("allows only the recorded organizer to add verifiers and emits VerifierAdded", async function () {
+      const { registry, admin, organizer, other, verifierOne } = await loadFixture(deployRegistryFixture);
+      const eventDeadline = BigInt((await time.latest()) + 3600);
+      await registry.connect(organizer).createEvent("Championship", eventDeadline, 0);
+
+      await expect(registry.connect(other).addVerifier(1, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "NotEventOrganizer")
+        .withArgs(other.address, 1n);
+
+      await expect(registry.connect(admin).addVerifier(1, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "NotEventOrganizer")
+        .withArgs(admin.address, 1n);
+
+      await expect(registry.connect(organizer).addVerifier(1, verifierOne.address))
+        .to.emit(registry, "VerifierAdded")
+        .withArgs(1n, verifierOne.address, organizer.address, anyValue);
+
+      expect(await registry.isVerifier(1, verifierOne.address)).to.equal(true);
+      expect(await registry.isVerifier(1, other.address)).to.equal(false);
+    });
+
+    it("rejects zero address, organizer as verifier, and duplicate verifiers", async function () {
+      const { registry, organizer, verifierOne } = await loadFixture(deployRegistryFixture);
+      const eventDeadline = BigInt((await time.latest()) + 3600);
+      await registry.connect(organizer).createEvent("Championship", eventDeadline, 0);
+
+      await expect(registry.connect(organizer).addVerifier(1, ethers.ZeroAddress))
+        .to.be.revertedWithCustomError(registry, "ZeroAddressVerifier");
+
+      await expect(registry.connect(organizer).addVerifier(1, organizer.address))
+        .to.be.revertedWithCustomError(registry, "OrganizerCannotBeVerifier")
+        .withArgs(1n, organizer.address);
+
+      await registry.connect(organizer).addVerifier(1, verifierOne.address);
+
+      await expect(registry.connect(organizer).addVerifier(1, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "VerifierAlreadyAdded")
+        .withArgs(1n, verifierOne.address);
+    });
+
+    it("scopes verifiers to specific events", async function () {
+      const { registry, organizer, verifierOne } = await loadFixture(deployRegistryFixture);
+      const eventDeadline = BigInt((await time.latest()) + 3600);
+      await registry.connect(organizer).createEvent("Event 1", eventDeadline, 0);
+      await registry.connect(organizer).createEvent("Event 2", eventDeadline, 0);
+
+      await registry.connect(organizer).addVerifier(1, verifierOne.address);
+
+      expect(await registry.isVerifier(1, verifierOne.address)).to.equal(true);
+      expect(await registry.isVerifier(2, verifierOne.address)).to.equal(false);
+    });
+
+    it("rejects adding verifiers to non-existent, cancelled, or ended events", async function () {
+      const { registry, organizer, verifierOne } = await loadFixture(deployRegistryFixture);
+      const currentTime = await time.latest();
+      const eventDeadline = BigInt(currentTime + 500);
+
+      await expect(registry.connect(organizer).addVerifier(99, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "EventNotFound")
+        .withArgs(99n);
+
+      await registry.connect(organizer).createEvent("Event Cancelled", eventDeadline, 0);
+      await registry.connect(organizer).cancelEvent(1);
+
+      await expect(registry.connect(organizer).addVerifier(1, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "EventNotActive")
+        .withArgs(1n);
+
+      const shortDeadline = BigInt((await time.latest()) + 100);
+      await registry.connect(organizer).createEvent("Event Ending", shortDeadline, 0);
+      await time.increaseTo(shortDeadline);
+
+      await expect(registry.connect(organizer).addVerifier(2, verifierOne.address))
+        .to.be.revertedWithCustomError(registry, "EventNotActive")
         .withArgs(2n);
     });
   });
