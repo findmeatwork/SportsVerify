@@ -401,4 +401,149 @@ describe("SportsPlayerRegistry", function () {
       expect((await registry.getParticipant(1, secondId)).hasAffiliation).to.equal(true);
     });
   });
+
+  describe("verification state machine", function () {
+    async function verificationFixture() {
+      const fixture = await deployRegistryFixture();
+      const eventDeadline = BigInt((await time.latest()) + 7200);
+      await fixture.registry.connect(fixture.organizer).createEvent("Verification Games", eventDeadline, 0);
+      await fixture.registry.connect(fixture.organizer).addVerifier(1, fixture.verifierOne.address);
+      await fixture.registry.connect(fixture.organizer).addVerifier(1, fixture.verifierTwo.address);
+
+      const participantId = ethers.id("player-001");
+      const commitment = ethers.id("commitment-001");
+      const dobHash = ethers.id("dob-001");
+      await fixture.registry
+        .connect(fixture.participant)
+        .registerParticipant(1, participantId, commitment, dobHash, false);
+
+      return { ...fixture, eventDeadline, participantId, commitment, dobHash };
+    }
+
+    it("single confirm keeps status Registered and emits VerificationVoted", async function () {
+      const { registry, verifierOne, participantId } = await loadFixture(verificationFixture);
+      const evidenceHash = ethers.id("evidence-001");
+
+      await expect(registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceHash))
+        .to.emit(registry, "VerificationVoted")
+        .withArgs(1n, participantId, verifierOne.address, true, evidenceHash, 1, anyValue);
+
+      const participant = await registry.getParticipant(1, participantId);
+      expect(participant.status).to.equal(1n);
+
+      const verifications = await registry.getVerifications(1, participantId);
+      expect(verifications.length).to.equal(1);
+      expect(verifications[0].verifier).to.equal(verifierOne.address);
+      expect(verifications[0].approved).to.equal(true);
+      expect(verifications[0].evidenceHash).to.equal(evidenceHash);
+      expect(await registry.isRegistered(1, participantId)).to.equal(true);
+    });
+
+    it("confirm plus different confirm sets status to Confirmed", async function () {
+      const { registry, verifierOne, verifierTwo, participantId, commitment } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+      const evidenceTwo = ethers.id("evidence-002");
+
+      await registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceOne);
+
+      await expect(registry.connect(verifierTwo).submitVerification(1, participantId, true, evidenceTwo))
+        .to.emit(registry, "VerificationVoted")
+        .withArgs(1n, participantId, verifierTwo.address, true, evidenceTwo, 4, anyValue);
+
+      const participant = await registry.getParticipant(1, participantId);
+      expect(participant.status).to.equal(4n);
+
+      expect(await registry.isRegistered(1, participantId)).to.equal(false);
+      expect(await registry.verifyCommitment(1, participantId, commitment)).to.equal(false);
+
+      const verifications = await registry.getVerifications(1, participantId);
+      expect(verifications.length).to.equal(2);
+    });
+
+    it("confirm plus different reject sets status to Rejected", async function () {
+      const { registry, verifierOne, verifierTwo, participantId } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+      const evidenceTwo = ethers.id("evidence-002");
+
+      await registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceOne);
+
+      await expect(registry.connect(verifierTwo).submitVerification(1, participantId, false, evidenceTwo))
+        .to.emit(registry, "VerificationVoted")
+        .withArgs(1n, participantId, verifierTwo.address, false, evidenceTwo, 5, anyValue);
+
+      const participant = await registry.getParticipant(1, participantId);
+      expect(participant.status).to.equal(5n);
+    });
+
+    it("first-vote reject immediately sets status to Rejected", async function () {
+      const { registry, verifierOne, participantId } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+
+      await expect(registry.connect(verifierOne).submitVerification(1, participantId, false, evidenceOne))
+        .to.emit(registry, "VerificationVoted")
+        .withArgs(1n, participantId, verifierOne.address, false, evidenceOne, 5, anyValue);
+
+      const participant = await registry.getParticipant(1, participantId);
+      expect(participant.status).to.equal(5n);
+    });
+
+    it("rejects duplicate votes from the same verifier", async function () {
+      const { registry, verifierOne, participantId } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+
+      await registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceOne);
+
+      await expect(registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "VerifierAlreadyVoted")
+        .withArgs(1n, participantId, verifierOne.address);
+    });
+
+    it("rejects votes after verification is finalized (Confirmed or Rejected)", async function () {
+      const { registry, verifierOne, verifierTwo, participantId } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+      const evidenceTwo = ethers.id("evidence-002");
+
+      await registry.connect(verifierOne).submitVerification(1, participantId, false, evidenceOne);
+
+      await expect(registry.connect(verifierTwo).submitVerification(1, participantId, true, evidenceTwo))
+        .to.be.revertedWithCustomError(registry, "VerificationFinalized")
+        .withArgs(1n, participantId, 5n);
+    });
+
+    it("enforces verification guards in strict order", async function () {
+      const { registry, organizer, other, verifierOne, participantId } = await loadFixture(verificationFixture);
+      const evidenceOne = ethers.id("evidence-001");
+
+      await expect(registry.connect(verifierOne).submitVerification(99, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "EventNotFound")
+        .withArgs(99n);
+
+      await expect(registry.connect(other).submitVerification(1, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "NotEventVerifier")
+        .withArgs(other.address, 1n);
+
+      await expect(registry.connect(organizer).submitVerification(1, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "NotEventVerifier")
+        .withArgs(organizer.address, 1n);
+
+      const eventDeadline = BigInt((await time.latest()) + 3600);
+      await registry.connect(organizer).createEvent("Second Event", eventDeadline, 0);
+      await expect(registry.connect(verifierOne).submitVerification(2, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "NotEventVerifier")
+        .withArgs(verifierOne.address, 2n);
+
+      const unknownParticipant = ethers.id("player-unknown");
+      await expect(registry.connect(verifierOne).submitVerification(1, unknownParticipant, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "ParticipantNotRegistered")
+        .withArgs(1n, unknownParticipant);
+
+      await expect(registry.connect(verifierOne).submitVerification(1, participantId, true, ethers.ZeroHash))
+        .to.be.revertedWithCustomError(registry, "ZeroEvidenceHash");
+
+      await registry.connect(organizer).cancelEvent(1);
+      await expect(registry.connect(verifierOne).submitVerification(1, participantId, true, evidenceOne))
+        .to.be.revertedWithCustomError(registry, "EventNotActive")
+        .withArgs(1n);
+    });
+  });
 });

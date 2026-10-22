@@ -42,6 +42,13 @@ contract SportsPlayerRegistry is AccessControl {
         bool hasAffiliation;
     }
 
+    struct VerificationRecord {
+        address verifier;
+        bool approved;
+        bytes32 evidenceHash;
+        uint256 timestamp;
+    }
+
     error EventNotFound(uint256 eventId);
     error RegistrationIsClosed(uint256 eventId);
     error RegistrationDeadlinePassed(uint256 eventId);
@@ -59,6 +66,11 @@ contract SportsPlayerRegistry is AccessControl {
     error ZeroAddressVerifier();
     error OrganizerCannotBeVerifier(uint256 eventId, address account);
     error VerifierAlreadyAdded(uint256 eventId, address verifier);
+    error NotEventVerifier(address caller, uint256 eventId);
+    error ParticipantNotRegistered(uint256 eventId, bytes32 participantId);
+    error VerificationFinalized(uint256 eventId, bytes32 participantId, RegistrationStatus status);
+    error ZeroEvidenceHash();
+    error VerifierAlreadyVoted(uint256 eventId, bytes32 participantId, address verifier);
 
     event EventCreated(
         uint256 indexed id,
@@ -80,6 +92,15 @@ contract SportsPlayerRegistry is AccessControl {
         address indexed addedBy,
         uint256 addedAt
     );
+    event VerificationVoted(
+        uint256 indexed eventId,
+        bytes32 indexed participantId,
+        address indexed verifier,
+        bool approved,
+        bytes32 evidenceHash,
+        uint8 resultingStatus,
+        uint256 timestamp
+    );
     event ParticipantRegistered(
         uint256 indexed eventId,
         bytes32 indexed participantId,
@@ -95,6 +116,7 @@ contract SportsPlayerRegistry is AccessControl {
     mapping(uint256 eventId => mapping(bytes32 participantId => Registration)) private _registrations;
     mapping(uint256 eventId => bytes32[]) private _eventParticipantIds;
     mapping(uint256 eventId => mapping(address verifier => bool)) private _verifiers;
+    mapping(uint256 eventId => mapping(bytes32 participantId => VerificationRecord[])) private _verifications;
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -157,6 +179,57 @@ contract SportsPlayerRegistry is AccessControl {
 
     function isVerifier(uint256 eventId, address account) public view returns (bool) {
         return _verifiers[eventId][account];
+    }
+
+    function submitVerification(uint256 eventId, bytes32 participantId, bool approved, bytes32 evidenceHash) external {
+        if (_events[eventId].id == 0) revert EventNotFound(eventId);
+        if (!_verifiers[eventId][msg.sender]) revert NotEventVerifier(msg.sender, eventId);
+        if (getEventStatus(eventId) != EventStatus.Active) revert EventNotActive(eventId);
+
+        Registration storage registration = _registrations[eventId][participantId];
+        if (registration.status == RegistrationStatus.None) revert ParticipantNotRegistered(eventId, participantId);
+        if (registration.status != RegistrationStatus.Registered) {
+            revert VerificationFinalized(eventId, participantId, registration.status);
+        }
+        if (evidenceHash == bytes32(0)) revert ZeroEvidenceHash();
+
+        VerificationRecord[] storage records = _verifications[eventId][participantId];
+        for (uint256 i = 0; i < records.length; i++) {
+            if (records[i].verifier == msg.sender) {
+                revert VerifierAlreadyVoted(eventId, participantId, msg.sender);
+            }
+        }
+
+        records.push(VerificationRecord({
+            verifier: msg.sender,
+            approved: approved,
+            evidenceHash: evidenceHash,
+            timestamp: block.timestamp
+        }));
+
+        if (!approved) {
+            registration.status = RegistrationStatus.Rejected;
+        } else if (records.length == 2) {
+            registration.status = RegistrationStatus.Confirmed;
+        }
+
+        emit VerificationVoted(
+            eventId,
+            participantId,
+            msg.sender,
+            approved,
+            evidenceHash,
+            uint8(registration.status),
+            block.timestamp
+        );
+    }
+
+    function getVerifications(uint256 eventId, bytes32 participantId)
+        external
+        view
+        returns (VerificationRecord[] memory)
+    {
+        return _verifications[eventId][participantId];
     }
 
     function getEventStatus(uint256 eventId) public view returns (EventStatus) {
