@@ -18,7 +18,7 @@ const contractErrorMessages = {
   ParticipantNotRegistered: "Participant is not registered for this event.",
   VerificationFinalized: "Verification already finalized; cannot vote again.",
   ZeroEvidenceHash: "Evidence hash cannot be zero.",
-  VerifierAlreadyVoted: "Verifier has already voted for this participant.",: "This wallet is not authorized to perform that action.",
+  VerifierAlreadyVoted: "Verifier has already voted for this participant.",
   EventNotFound: "That event does not exist.",
   NotEventManager: "Only the event organizer or an admin can manage this event.",
   ParticipantAlreadyRegistered: "This participant is already registered for the event.",

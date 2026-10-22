@@ -5,12 +5,22 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 
 /** Generate a random 32‑byte hex string (bytes32) */
 export function generateSalt() {
+  // Returns a random 32‑byte hex string (bytes32) used as a cryptographic salt.
   return hexlify(randomBytes(32));
 }
 
-/**
- * Validates and normalizes a date string in YYYY‑MM‑DD format.
- * Throws an Error if the format is invalid or the date is in the future.
+/** Generate a random participant identifier (bytes32).
+ *  The identifier is a 32‑byte hex string (0x…64 hex chars) suitable for
+ *  passing to the Solidity contract as `bytes32 participantId`.
+ *  It uses the same secure random source as `generateSalt`.
+ */
+export function generateParticipantId() {
+  // Re‑use the randomBytes utility to create a fresh 32‑byte value.
+  return hexlify(randomBytes(32));
+}
+
+/** Validate and normalize a date string in YYYY‑MM‑DD format.
+ *  Throws an Error if the format is invalid or the date is in the future.
  */
 export function normalizeDob(dateString) {
   if (!dateString) throw new Error('Date of birth is required.');
