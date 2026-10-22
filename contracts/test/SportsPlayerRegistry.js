@@ -176,12 +176,16 @@ describe("SportsPlayerRegistry", function () {
       const { registry, participant } = await loadFixture(eventFixture);
       const participantId = ethers.id("player-001");
       const commitment = ethers.id("registration-commitment");
-      const transaction = await registry.connect(participant).registerParticipant(1, participantId, commitment);
+      const dobHash = ethers.id("dob-hash-001");
+      const hasAffiliation = true;
+      const transaction = await registry
+        .connect(participant)
+        .registerParticipant(1, participantId, commitment, dobHash, hasAffiliation);
       const receipt = await transaction.wait();
 
       await expect(transaction)
         .to.emit(registry, "ParticipantRegistered")
-        .withArgs(1n, participantId, commitment, participant.address, anyValue);
+        .withArgs(1n, participantId, commitment, participant.address, anyValue, hasAffiliation, dobHash);
 
       const registration = await registry.getParticipant(1, participantId);
       expect(registration.participantId).to.equal(participantId);
@@ -189,6 +193,8 @@ describe("SportsPlayerRegistry", function () {
       expect(registration.registrant).to.equal(participant.address);
       expect(registration.submittedAt).to.be.greaterThan(0n);
       expect(registration.status).to.equal(1n);
+      expect(registration.dobHash).to.equal(dobHash);
+      expect(registration.hasAffiliation).to.equal(hasAffiliation);
       expect(receipt.status).to.equal(1);
       expect(await registry.isRegistered(1, participantId)).to.equal(true);
     });
@@ -197,15 +203,20 @@ describe("SportsPlayerRegistry", function () {
       const { registry, participant, other } = await loadFixture(eventFixture);
       const participantId = ethers.id("player-001");
       const originalCommitment = ethers.id("original");
-      await registry.connect(participant).registerParticipant(1, participantId, originalCommitment);
+      const originalDobHash = ethers.id("dob-hash-orig");
+      await registry.connect(participant).registerParticipant(1, participantId, originalCommitment, originalDobHash, false);
 
-      await expect(registry.connect(other).registerParticipant(1, participantId, ethers.id("replacement")))
+      await expect(
+        registry.connect(other).registerParticipant(1, participantId, ethers.id("replacement"), ethers.id("dob-other"), true)
+      )
         .to.be.revertedWithCustomError(registry, "ParticipantAlreadyRegistered")
         .withArgs(1n, participantId);
 
       const registration = await registry.getParticipant(1, participantId);
       expect(registration.commitment).to.equal(originalCommitment);
       expect(registration.registrant).to.equal(participant.address);
+      expect(registration.dobHash).to.equal(originalDobHash);
+      expect(registration.hasAffiliation).to.equal(false);
       expect(await registry.getEventRegistrationCount(1)).to.equal(1n);
     });
 
@@ -213,8 +224,9 @@ describe("SportsPlayerRegistry", function () {
       const { registry, organizer, participant } = await loadFixture(deployRegistryFixture);
       const participantId = ethers.id("player-001");
       const commitment = ethers.id("commitment");
+      const dobHash = ethers.id("dob-hash");
 
-      await expect(registry.connect(participant).registerParticipant(1, participantId, commitment))
+      await expect(registry.connect(participant).registerParticipant(1, participantId, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "EventNotFound")
         .withArgs(1n);
 
@@ -224,26 +236,26 @@ describe("SportsPlayerRegistry", function () {
 
       await registry.connect(organizer).createEvent("Closed", longDeadline, 0);
       await registry.connect(organizer).setRegistrationOpen(1, false);
-      await expect(registry.connect(participant).registerParticipant(1, participantId, commitment))
+      await expect(registry.connect(participant).registerParticipant(1, participantId, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "RegistrationIsClosed")
         .withArgs(1n);
 
       await registry.connect(organizer).createEvent("RegExpiring", longDeadline, regDeadline);
       await time.increaseTo(regDeadline + 1n);
-      await expect(registry.connect(participant).registerParticipant(2, participantId, commitment))
+      await expect(registry.connect(participant).registerParticipant(2, participantId, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "RegistrationDeadlinePassed")
         .withArgs(2n);
 
       const shortEventDeadline = BigInt((await time.latest()) + 100);
       await registry.connect(organizer).createEvent("Finishing", shortEventDeadline, 0);
       await time.increaseTo(shortEventDeadline);
-      await expect(registry.connect(participant).registerParticipant(3, participantId, commitment))
+      await expect(registry.connect(participant).registerParticipant(3, participantId, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "EventNotActive")
         .withArgs(3n);
 
       await registry.connect(organizer).createEvent("CancelledEvent", longDeadline, 0);
       await registry.connect(organizer).cancelEvent(4);
-      await expect(registry.connect(participant).registerParticipant(4, participantId, commitment))
+      await expect(registry.connect(participant).registerParticipant(4, participantId, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "EventNotActive")
         .withArgs(4n);
     });
@@ -254,21 +266,24 @@ describe("SportsPlayerRegistry", function () {
       const eventDeadline = BigInt((await time.latest()) + 3600);
       await registry.connect(organizer).createEvent("Open Trials", eventDeadline, 0);
 
-      await registry.connect(participant).registerParticipant(1, participantId, ethers.id("event-one"));
-      await registry.connect(participant).registerParticipant(2, participantId, ethers.id("event-two"));
+      await registry.connect(participant).registerParticipant(1, participantId, ethers.id("event-one"), ethers.id("dob-1"), false);
+      await registry.connect(participant).registerParticipant(2, participantId, ethers.id("event-two"), ethers.id("dob-2"), true);
 
       expect(await registry.isRegistered(1, participantId)).to.equal(true);
       expect(await registry.isRegistered(2, participantId)).to.equal(true);
     });
 
-    it("rejects zero participant ids and commitments", async function () {
+    it("rejects zero participant ids, commitments, and dob hashes", async function () {
       const { registry, participant } = await loadFixture(eventFixture);
       const commitment = ethers.id("commitment");
+      const dobHash = ethers.id("dob-hash");
 
-      await expect(registry.connect(participant).registerParticipant(1, ethers.ZeroHash, commitment))
+      await expect(registry.connect(participant).registerParticipant(1, ethers.ZeroHash, commitment, dobHash, false))
         .to.be.revertedWithCustomError(registry, "ZeroParticipantId");
-      await expect(registry.connect(participant).registerParticipant(1, ethers.id("player-001"), ethers.ZeroHash))
+      await expect(registry.connect(participant).registerParticipant(1, ethers.id("player-001"), ethers.ZeroHash, dobHash, false))
         .to.be.revertedWithCustomError(registry, "ZeroCommitment");
+      await expect(registry.connect(participant).registerParticipant(1, ethers.id("player-001"), commitment, ethers.ZeroHash, false))
+        .to.be.revertedWithCustomError(registry, "ZeroDobHash");
     });
 
     it("restricts registration settings to the event organizer or admin", async function () {
@@ -289,8 +304,10 @@ describe("SportsPlayerRegistry", function () {
       const secondId = ethers.id("player-002");
       const firstCommitment = ethers.id("commitment-one");
       const secondCommitment = ethers.id("commitment-two");
-      await registry.connect(participant).registerParticipant(1, firstId, firstCommitment);
-      await registry.connect(participant).registerParticipant(1, secondId, secondCommitment);
+      const firstDob = ethers.id("dob-one");
+      const secondDob = ethers.id("dob-two");
+      await registry.connect(participant).registerParticipant(1, firstId, firstCommitment, firstDob, false);
+      await registry.connect(participant).registerParticipant(1, secondId, secondCommitment, secondDob, true);
 
       expect(await registry.getEventRegistrationCount(1)).to.equal(2n);
       expect(await registry.getEventParticipantIds(1, 0, 1)).to.deep.equal([firstId]);
@@ -300,6 +317,9 @@ describe("SportsPlayerRegistry", function () {
       expect(await registry.verifyCommitment(1, firstId, secondCommitment)).to.equal(false);
       expect(await registry.verifyCommitment(1, ethers.id("unknown"), firstCommitment)).to.equal(false);
       expect((await registry.getParticipant(1, firstId)).commitment).to.equal(firstCommitment);
+      expect((await registry.getParticipant(1, firstId)).dobHash).to.equal(firstDob);
+      expect((await registry.getParticipant(1, firstId)).hasAffiliation).to.equal(false);
+      expect((await registry.getParticipant(1, secondId)).hasAffiliation).to.equal(true);
     });
   });
 });

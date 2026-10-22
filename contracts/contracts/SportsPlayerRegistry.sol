@@ -16,7 +16,9 @@ contract SportsPlayerRegistry is AccessControl {
         None,
         Registered,
         Withdrawn,
-        Suspended
+        Suspended,
+        Confirmed,
+        Rejected
     }
 
     struct EventData {
@@ -36,6 +38,8 @@ contract SportsPlayerRegistry is AccessControl {
         address registrant;
         uint256 submittedAt;
         RegistrationStatus status;
+        bytes32 dobHash;
+        bool hasAffiliation;
     }
 
     error EventNotFound(uint256 eventId);
@@ -51,6 +55,7 @@ contract SportsPlayerRegistry is AccessControl {
     error NotEventOrganizer(address caller, uint256 eventId);
     error EventAlreadyCancelled(uint256 eventId);
     error EventHasEnded(uint256 eventId);
+    error ZeroDobHash();
 
     event EventCreated(
         uint256 indexed id,
@@ -71,7 +76,9 @@ contract SportsPlayerRegistry is AccessControl {
         bytes32 indexed participantId,
         bytes32 commitment,
         address indexed registrant,
-        uint256 submittedAt
+        uint256 submittedAt,
+        bool hasAffiliation,
+        bytes32 dobHash
     );
 
     uint256 private _nextEventId = 1;
@@ -173,7 +180,13 @@ contract SportsPlayerRegistry is AccessControl {
         eventData.registrationOpen = isOpen;
     }
 
-    function registerParticipant(uint256 eventId, bytes32 participantId, bytes32 commitment) external {
+    function registerParticipant(
+        uint256 eventId,
+        bytes32 participantId,
+        bytes32 commitment,
+        bytes32 dobHash,
+        bool hasAffiliation
+    ) external {
         EventData storage eventData = _events[eventId];
         if (eventData.id == 0) revert EventNotFound(eventId);
         if (getEventStatus(eventId) != EventStatus.Active) revert EventNotActive(eventId);
@@ -183,6 +196,7 @@ contract SportsPlayerRegistry is AccessControl {
         }
         if (participantId == bytes32(0)) revert ZeroParticipantId();
         if (commitment == bytes32(0)) revert ZeroCommitment();
+        if (dobHash == bytes32(0)) revert ZeroDobHash();
         if (_registrations[eventId][participantId].status != RegistrationStatus.None) {
             revert ParticipantAlreadyRegistered(eventId, participantId);
         }
@@ -193,11 +207,13 @@ contract SportsPlayerRegistry is AccessControl {
             commitment: commitment,
             registrant: msg.sender,
             submittedAt: submittedAt,
-            status: RegistrationStatus.Registered
+            status: RegistrationStatus.Registered,
+            dobHash: dobHash,
+            hasAffiliation: hasAffiliation
         });
         _eventParticipantIds[eventId].push(participantId);
 
-        emit ParticipantRegistered(eventId, participantId, commitment, msg.sender, submittedAt);
+        emit ParticipantRegistered(eventId, participantId, commitment, msg.sender, submittedAt, hasAffiliation, dobHash);
     }
 
     function getParticipant(uint256 eventId, bytes32 participantId)
