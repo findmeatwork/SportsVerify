@@ -7,7 +7,7 @@ dotenv.config(); // Load from backend .env
  * Throws an Error with a clear message if any variable is missing or invalid.
  */
 function validateEnv() {
-  const required = ["CORS_ORIGIN", "RPC_URL", "CHAIN_ID", "CONTRACT_JSON", "MONGO_URI", "PII_ENCRYPTION_KEY"];
+  const required = ["CORS_ORIGIN", "RPC_URL", "CHAIN_ID", "CONTRACT_JSON", "MONGO_URI", "PII_ENCRYPTION_KEY", "JWT_SECRET", "NONCE_TTL_SECONDS", "SESSION_TTL_HOURS"];
   const missing = required.filter((key) => !(key in process.env));
   if (missing.length) {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);

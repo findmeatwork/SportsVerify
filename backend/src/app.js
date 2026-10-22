@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { config } from "./config/env.js";
+import authRouter from "./routes/auth.routes.js";
 
 const app = express();
 
@@ -14,6 +15,9 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+// Auth routes
+app.use("/api/auth", authRouter);
 
 // 404 handler
 app.use((req, res) => {
@@ -29,4 +33,3 @@ app.use((err, req, res, next) => {
 });
 
 export default app;
-
