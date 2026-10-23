@@ -7,7 +7,7 @@ dotenv.config(); // Load from backend .env
  * Throws an Error with a clear message if any variable is missing or invalid.
  */
 function validateEnv() {
-  const required = ["CORS_ORIGIN", "RPC_URL", "CHAIN_ID", "CONTRACT_JSON", "MONGO_URI", "PII_ENCRYPTION_KEY", "JWT_SECRET", "NONCE_TTL_SECONDS", "SESSION_TTL_HOURS"];
+  const required = ["CORS_ORIGIN", "RPC_URL", "CHAIN_ID", "CONTRACT_JSON", "MONGO_URI", "PII_ENCRYPTION_KEY", "JWT_SECRET", "STORAGE_DIR"];
   const missing = required.filter((key) => !(key in process.env));
   if (missing.length) {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
@@ -38,5 +38,10 @@ export const config = Object.freeze({
   CONTRACT_JSON: process.env.CONTRACT_JSON,
   MONGO_URI: process.env.MONGO_URI,
   PII_ENCRYPTION_KEY: process.env.PII_ENCRYPTION_KEY,
-
+  JWT_SECRET: process.env.JWT_SECRET,
+  NONCE_TTL_SECONDS: Number(process.env.NONCE_TTL_SECONDS) || 300,
+  SESSION_TTL_HOURS: Number(process.env.SESSION_TTL_HOURS) || 8,
+  LOOKUP_TOKEN_TTL_SECONDS: Number(process.env.LOOKUP_TOKEN_TTL_SECONDS) || 600,
+  MAX_UPLOAD_MB: Number(process.env.MAX_UPLOAD_MB) || 5,
+  STORAGE_DIR: process.env.STORAGE_DIR,
 });
